@@ -12,7 +12,7 @@ var MAX_THREADS_TO_PROCESS = 2;
 
 //Set which label we are using to filter which emails are being retrieved
 var RSVP_LABEL = 'Wedding RSVPs';
-var SPREADSHEET_ID = '1Tqa1SaUywdLx_IQS__4DU-D8B9g905KIdn4cC3suql4';
+var SPREADSHEET_ID = '1UTJ1Bs33uF0nbEEHYGIYUL4cv5ftV_W1j-jdhadw9po';
 
 if(LOGGING_ENABLED){
 	//Clear out previous logs
@@ -74,14 +74,24 @@ function processRSVPs(rsvp_label) {
  */
 function addRSVPToSpreadsheet(rsvp){
 
-	//Check if the spreadsheet exists or create a new one
-	spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+	//Convert the rsvp object into an array
+	rsvp_array = Object.keys(rsvp).map(function(k) { return rsvp[k] });
 
-	if(!spreadsheet){
+	//Check if the spreadsheet exists or create a new one
+	var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+	var sheet = spreadsheet.getSheets()[0];
+
+	if(!spreadsheet || !sheet){
 		return false;
 	}
 
-	return false;
+	sheet = sheet.appendRow(rsvp_array);
+
+	if(!sheet){
+		return false;
+	}else{
+		return true;
+	}
 
 }
 
@@ -128,12 +138,14 @@ function checkMessageDate(message, start_date) {
  */
 function parseRSVPEmail(body) {
 
-	body = body.replaceAll('<br />', '', body);
+	body = replaceAll('<br />', '', body);
 
 	var message_lines = body.split("\n");
 
 	//Initialize our RSVP Object
 	rsvp = {};
+
+	var skip_fields = ['from', 'subject']
 
 	for(i = 0; i < message_lines.length; i++) {
 
@@ -141,9 +153,15 @@ function parseRSVPEmail(body) {
 
 		//Make the line type lower case, replace spaces with underscores, and remove any other unexpected character
 		// var line_type = line_parts[0].toLowerCase().replaceAll(' ', '_').replaceAll('/[^a-z0-9_]/', '');
-		var line_type = line_parts[0].toLowerCase().replaceAll(' ', '_', line_type);
+		var line_type = line_parts[0].toLowerCase();
+		line_type = replaceAll(' ', '_', line_type);
 		line_type = replaceAll('/[^a-z0-9_]/', '', line_type);
 		
+		//Skip over fields we don't need
+		if(skip_fields.indexOf(line_type) == -1){
+			continue;
+		}
+
 		//In case there's a ":" in the message, reassemble the rest of the line
 		var line_value = "";
 
