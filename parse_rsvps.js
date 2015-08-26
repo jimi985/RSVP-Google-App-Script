@@ -19,14 +19,13 @@ if(LOGGING_ENABLED){
 	Logger.log("Starting script: Parse Wedding RSVPs");
 }
 
-processRSVPs(RSVP_LABEL);
-
 /*
  * Function that retrieves a list of gmail email threads
  * with a provided label and parses them.
  * @param - {string} rsvp_label - The label applied to emails that should be parsed.
  */
 function processRSVPs(rsvp_label) {
+
 	var rsvp_threads = getGmailThreadsWithLabelName(rsvp_label);
 
 	if(rsvp_threads.length <= 0){
@@ -37,7 +36,7 @@ function processRSVPs(rsvp_label) {
 	messages = [];
 	for(var i = 0; i < rsvp_threads.length; i++) {
 
-		messages = messages.concat(getMessagesFromThread(rsvp_threads[i]));
+		messages = messages.concat(rsvp_threads[i].getMessages());
 
 		//While debugging, only try to process the first few email threads
 		if(MAX_THREADS_TO_PROCESS > 0 && (i + 1) >= MAX_THREADS_TO_PROCESS){
@@ -50,9 +49,17 @@ function processRSVPs(rsvp_label) {
 	messages = filterMessages(messages);
 
 	for(i = 0; i < messages.length; i++){
-		rsvp = parseRSVPEmail(messages[i].getBody());
+		Logger.log(messages[i].getBody());
+
+		var rsvp = parseRSVPEmail(messages[i].getBody());
 
 		//Add rsvp entry to spreadsheet
+		if(addRSVPToSpreadsheet(rsvp)) {
+			Logger.log("RSVP Successfully added to spreadsheet: " + JSON.stringify(rsvp));
+		}else{
+			Logger.log("RSVP could not be added to spreadsheet: " + JSON.stringify(rsvp));
+		}
+
 	}
 
 }
@@ -61,36 +68,14 @@ function processRSVPs(rsvp_label) {
  * Loops through an array of email threads and parses each thread.
  * @param - {Object} rsvp - the rsvp object to add to the spreadsheet.
  * @returns - {boolean} - true if added to the spreadsheet,
- *  false if already there or there was an error.
+ *  false if already exists or there was an error.
  */
 function addRSVPToSpreadsheet(rsvp){
 
+	return false;
 
 }
 
-/*
- * Loops through an array of email threads and parses each thread.
- * @param - {GmailThread} thread - the email thread to retrieve emails from.
- */
-function getMessagesFromThread(thread) {
-
-	if(threads.length <= 0){
-		Logger.log("No Wedding RSVP Threads found");
-		return false;
-	}
-
-	for(var i = 0; i < threads.length; i++) {
-
-		processThreadMessages(threads[i].getMessages());
-
-		//While debugging, only try to process the first few email threads
-		if(MAX_THREADS_TO_PROCESS > 0 && (i + 1) >= MAX_THREADS_TO_PROCESS){
-			return false;
-		}
-
-	}
-
-}
 
 /*
  * Filters an array of messages and returns a modified version of the original array
@@ -130,12 +115,25 @@ function checkMessageDate(message, start_date) {
  * Parses an email of a specific format to retrieve its component parts
  * The email must be formatted with as: <string>: <string>, representing a key/value pair.
  * @param - {string} body - the contents of an rsvp email.
+ * @returns - {Object} - rsvp details object.
  */
 function parseRSVPEmail(body) {
 
-	msg = msg.replaceAll('<br />', '');
+	// var test = 'abcdefg';
+	// if(!test.hasOwnProperty('replaceAll')){
+	// 	Logger.log("test Missing replaceAll prototype method!?!");
+	// 	return false;
+	// }
 
-	var message_lines = msg.split("\n");
+	// var msg = body;
+	// if(!msg.hasOwnProperty('replaceAll')){
+	// 	Logger.log("Missing replaceAll prototype method!?!");
+	// 	return false;
+	// }
+
+	body = body.replaceAll('<br />', '', body);
+
+	var message_lines = body.split("\n");
 
 	//Initialize our RSVP Object
 	rsvp = {};
@@ -145,10 +143,13 @@ function parseRSVPEmail(body) {
 		var line_parts = message_lines[i].split(':');
 
 		//Make the line type lower case, replace spaces with underscores, and remove any other unexpected character
-		var line_type = line_parts[0].toLowerCase().replaceAll(' ', '_').replaceAll('/[^a-z0-9_]/', '');
+		// var line_type = line_parts[0].toLowerCase().replaceAll(' ', '_').replaceAll('/[^a-z0-9_]/', '');
+		var line_type = line_parts[0].toLowerCase().replaceAll(' ', '_', line_type);
+		line_type = replaceAll('/[^a-z0-9_]/', '', line_type);
 		
 		//In case there's a ":" in the message, reassemble the rest of the line
 		var line_value = "";
+
 		for(var j = 1; j < line_parts.length; j++) {
 			line_value += line_parts[j];
 		}
@@ -211,8 +212,12 @@ function getGmailThreadsWithLabelName(label_name) {
  * @param {string} find - Regular expression string
  * @param {string} replace - String to replace the matches that are found.
  */
-String.prototype.replaceAll = function(find, replace) {
-	return this.replace(new RegExp(escapeRegExp(find), 'g'), replace);
+// String.prototype.replaceAll = function(find, replace) {
+// 	return this.replace(new RegExp(escapeRegExp(find), 'g'), replace);
+// }
+
+function replaceAll(find, replace, subject){
+	return subject.replace(new RegExp(escapeRegExp(find), 'g'), replace);
 }
 
 /*
@@ -220,6 +225,7 @@ String.prototype.replaceAll = function(find, replace) {
  * @param {string} regex - Regular expression string.
  */
 function escapeRegExp(regex) {
-    return regex.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
+	return regex.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
 }
- 
+
+processRSVPs(RSVP_LABEL);
