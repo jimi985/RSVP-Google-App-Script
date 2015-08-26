@@ -1,13 +1,21 @@
 
+/*
+ * Global Variables
+ */
 var LOGGING_ENABLED = true;
 
 //Set a start date to filter out older emails
+var date = new Date('August 22, 2015 00:00:00');
+var START_TIME = date.getTime();
 var START_DATE = new Date('August 22, 2015 00:00:00');
+var MAX_THREADS_TO_PROCESS = 2;
 
 //Set which label we are using to filter which emails are being retrieved
-var rsvp_label = 'Wedding RSVPs';
+var RSVP_LABEL = 'Wedding RSVPs';
 
 if(LOGGING_ENABLED){
+	//Clear out previous logs
+	Logger.clear();
 	Logger.log("Starting script: Parse Wedding RSVPs");
 }
 
@@ -17,27 +25,32 @@ processRSVPs(RSVP_LABEL);
  * Function that retrieves a list of gmail email threads
  * with a provided label and parses them.
  */
-function processRSVPs(rsvp_label){
-
+function processRSVPs(rsvp_label) {
 	var rsvp_threads = getGmailThreadsWithLabelName(rsvp_label);
 	processThreads(rsvp_threads);
-
 }
 
 /*
  * Loops through an array of email threads and parses each thread.
  * @param - {string[]} - messages
  */
-function processThreads(threads){
+function processThreads(threads) {
 
 	if(threads.length <= 0){
-		Logger.log("No Wedding RSVPs Threads found");
+		Logger.log("No Wedding RSVP Threads found");
 		return false;
 	}
 
 	for (var i = 0; i < threads.length; i++) {
+
 		Logger.log(threads[i].getFirstMessageSubject());
 		processThreadMessages(threads[i].getMessages());
+
+		//While debugging, only try to process the first few email threads
+		if(MAX_THREADS_TO_PROCESS > 0 && (i + 1) >= MAX_THREADS_TO_PROCESS){
+			break;
+		}
+
 	}
 
 }
@@ -53,10 +66,15 @@ function processThreadMessages(messages){
 	}
 
 	for (var i = 0; i < messages.length; i++) {
-		
-		if(!checkMessageDate(messages[i])){
-			Logger.log("Skipping message: " + messages[i].getMessage() + " because it is too old.");
+		Logger.log("Checking time for message: " + messages[i].getSubject());
+		Logger.log("START_TIME: " + START_TIME);
+		if(!checkMessageDate(messages[i], START_TIME)) {
+			Logger.log("Skipping message: " + messages[i].getSubject() + " because it is too old.");
+			//Remove this message from the list of messages
+			messages.splice(i, 1);
 			continue;
+			// Logger.log('messages: ' + JSON.stringify(messages));
+			// continue;
 		}
 
 		Logger.log(messages[i].getBody());
@@ -65,12 +83,14 @@ function processThreadMessages(messages){
 }
 
 /*
- * Returns boolean if a message occurred after a specified date.
+ * Returns true if a message occurred after a specified date, otherwise false
  * This allows emails to be skipped that have already been processed.
  * @param {GmailMessage} message - The GmailMessage object to be checked.
  */
-function checkMessageDate(message, start_date){
-	return (message.getDate().getTime() > start_date.getTime()) ? true : false;
+function checkMessageDate(message, start_time) {
+	Logger.log("message time: " + message.getDate().getTime());
+	Logger.log("start_time: " + start_time);
+	return (message.getDate().getTime() > start_time) ? true : false;
 }
 
 /*
@@ -85,7 +105,7 @@ function parseRSVPEmail(body){
 
 	//Name the loop so we can break out of it when needed
 	message_loop:
-	for(i = 0; i < message_lines.length; i++){
+	for(i = 0; i < message_lines.length; i++) {
 
 		var line_parts = message_lines[i].split(':');
 
@@ -94,7 +114,7 @@ function parseRSVPEmail(body){
 		
 		//In case there's a ":" in the message, reassemble the rest of the line
 		var line_value = "";
-		for(var j = 1; j < line_parts.length; j++){
+		for(var j = 1; j < line_parts.length; j++) {
 			line_value += line_parts[j];
 		}
 		
@@ -132,7 +152,7 @@ function parseRSVPEmail(body){
  * Returns an array of GmailThreads that match a provided label.
  * @param {string} label_name - Gmail Label name being searched for.
  */
-function getGmailThreadsWithLabelName(label_name){
+function getGmailThreadsWithLabelName(label_name) {
 
 	var threads = [];
 	var new_threads = [];
@@ -142,16 +162,23 @@ function getGmailThreadsWithLabelName(label_name){
 	//First see if we can find the label
 	var label = GmailApp.getUserLabelByName(label_name);
 
+	//We could not retrieve a label, fail out.
+	if(!label){
+		return threads;
+	}
+
 	do {
+
 		new_threads = label.getThreads(start,loop_count);
 		threads = threads.concat(new_threads);
 		start += loop_count;
+
 	}
 	while(new_threads.length > 0);
 
 	if(LOGGING_ENABLED){
 		for (var i = 0; i < threads.length; i++) {
-			// Logger.log(threads[i].getFirstMessageSubject());
+			Logger.log(threads[i].getFirstMessageSubject());
 		}
 	}
 	
@@ -165,7 +192,7 @@ function getGmailThreadsWithLabelName(label_name){
  * @param {string} find - Regular expression string
  * @param {string} replace - String to replace the matches that are found.
  */
-String.prototype.replaceAll = function(find, replace){
+String.prototype.replaceAll = function(find, replace) {
 	return this.replace(new RegExp(escapeRegExp(find), 'g'), replace);
 }
 
