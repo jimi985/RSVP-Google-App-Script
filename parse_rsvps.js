@@ -245,10 +245,13 @@ function filterMessages(messages) {
 		return false;
 	}
 
-	for (var i = 0; i < messages.length; i++) {
+	 // The messages need to be traversed in reverse order
+	 // This is because we need to call the splice method to remove an element from
+	 // the messages array which reindexes the array
+	for (var i = messages.length - 1; i >= 0; i--) {
 
 		//Filter out messages if they are older than our start date.
-		if(!checkMessageDate(messages[i], START_DATE)) {
+		if(isMessageOlderThanDate(messages[i], START_DATE)) {
 			messages.splice(i, 1);
 			continue;
 		}
@@ -265,10 +268,8 @@ function filterMessages(messages) {
  * @param {GmailMessage} message - The GmailMessage object to be checked.
  * @returns {boolean}
  */
-function checkMessageDate(message, start_date) {
-	log('message time: ' + message.getDate().getTime());
-	log('start time: ' + start_date.getTime());
-	return (message.getDate().getTime() > start_date.getTime()) ? true : false;
+function isMessageOlderThanDate(message, start_date) {
+	return (message.getDate().getTime() > start_date.getTime()) ? false : true;
 }
 
 /*
