@@ -5,8 +5,8 @@
 var LOGGING_ENABLED = true;
 
 //Set a start date to filter out older emails
-var date = new Date('August 22, 2015 00:00:00');
-var START_TIME = date.getTime();
+// var date = new Date('August 22, 2015 00:00:00');
+// var START_TIME = date.getTime();
 var START_DATE = new Date('August 22, 2015 00:00:00');
 var MAX_THREADS_TO_PROCESS = 2;
 
@@ -24,27 +24,20 @@ processRSVPs(RSVP_LABEL);
 /*
  * Function that retrieves a list of gmail email threads
  * with a provided label and parses them.
+ * @param - {string} rsvp_label - The label applied to emails that should be parsed.
  */
 function processRSVPs(rsvp_label) {
 	var rsvp_threads = getGmailThreadsWithLabelName(rsvp_label);
-	processThreads(rsvp_threads);
-}
 
-/*
- * Loops through an array of email threads and parses each thread.
- * @param - {string[]} - messages
- */
-function processThreads(threads) {
-
-	if(threads.length <= 0){
+	if(rsvp_threads.length <= 0){
 		Logger.log("No Wedding RSVP Threads found");
 		return false;
 	}
 
-	for (var i = 0; i < threads.length; i++) {
+	messages = [];
+	for(var i = 0; i < rsvp_threads.length; i++) {
 
-		Logger.log(threads[i].getFirstMessageSubject());
-		processThreadMessages(threads[i].getMessages());
+		messages = messages.concat(getMessagesFromThread(rsvp_threads[i]));
 
 		//While debugging, only try to process the first few email threads
 		if(MAX_THREADS_TO_PROCESS > 0 && (i + 1) >= MAX_THREADS_TO_PROCESS){
@@ -53,44 +46,84 @@ function processThreads(threads) {
 
 	}
 
+	//Filter out messages we don't want to parse (based on date or other criteria)
+	messages = filterMessages(messages);
+
+	for(i = 0; i < messages.length; i++){
+		rsvp = parseRSVPEmail(messages[i].getBody());
+
+		//Add rsvp entry to spreadsheet
+	}
+
 }
 
 /*
- * Loops through a thread containing an array of messages and parses them.
- * @param - {string[]} - messages
+ * Loops through an array of email threads and parses each thread.
+ * @param - {Object} rsvp - the rsvp object to add to the spreadsheet.
+ * @returns - {boolean} - true if added to the spreadsheet,
+ *  false if already there or there was an error.
  */
-function processThreadMessages(messages){
+function addRSVPToSpreadsheet(rsvp){
+
+
+}
+
+/*
+ * Loops through an array of email threads and parses each thread.
+ * @param - {GmailThread} thread - the email thread to retrieve emails from.
+ */
+function getMessagesFromThread(thread) {
+
+	if(threads.length <= 0){
+		Logger.log("No Wedding RSVP Threads found");
+		return false;
+	}
+
+	for(var i = 0; i < threads.length; i++) {
+
+		processThreadMessages(threads[i].getMessages());
+
+		//While debugging, only try to process the first few email threads
+		if(MAX_THREADS_TO_PROCESS > 0 && (i + 1) >= MAX_THREADS_TO_PROCESS){
+			return false;
+		}
+
+	}
+
+}
+
+/*
+ * Filters an array of messages and returns a modified version of the original array
+ * @param - {GmailMessage[]} messages - list of messages to be filtered.
+ */
+function filterMessages(messages) {
 
 	if(messages.length <= 0){
 		return false;
 	}
 
 	for (var i = 0; i < messages.length; i++) {
-		Logger.log("Checking time for message: " + messages[i].getSubject());
-		Logger.log("START_TIME: " + START_TIME);
-		if(!checkMessageDate(messages[i], START_TIME)) {
-			Logger.log("Skipping message: " + messages[i].getSubject() + " because it is too old.");
-			//Remove this message from the list of messages
+
+		//Filter out messages if they are older than our start date.
+		if(!checkMessageDate(messages[i], START_DATE)) {
 			messages.splice(i, 1);
 			continue;
-			// Logger.log('messages: ' + JSON.stringify(messages));
-			// continue;
 		}
 
-		Logger.log(messages[i].getBody());
 	}
+
+	return messages;
 
 }
 
 /*
- * Returns true if a message occurred after a specified date, otherwise false
+ * Returns true if a message occurred after a specified date, otherwise false.
  * This allows emails to be skipped that have already been processed.
  * @param {GmailMessage} message - The GmailMessage object to be checked.
+ * @returns {boolean}
  */
-function checkMessageDate(message, start_time) {
-	Logger.log("message time: " + message.getDate().getTime());
-	Logger.log("start_time: " + start_time);
-	return (message.getDate().getTime() > start_time) ? true : false;
+function checkMessageDate(message, start_date) {
+	return (message.getDate().getTime() > start_date.getTime()) ? true : false;
 }
 
 /*
@@ -98,13 +131,15 @@ function checkMessageDate(message, start_time) {
  * The email must be formatted with as: <string>: <string>, representing a key/value pair.
  * @param - {string} body - the contents of an rsvp email.
  */
-function parseRSVPEmail(body){
+function parseRSVPEmail(body) {
+
 	msg = msg.replaceAll('<br />', '');
 
 	var message_lines = msg.split("\n");
 
-	//Name the loop so we can break out of it when needed
-	message_loop:
+	//Initialize our RSVP Object
+	rsvp = {};
+
 	for(i = 0; i < message_lines.length; i++) {
 
 		var line_parts = message_lines[i].split(':');
@@ -120,32 +155,18 @@ function parseRSVPEmail(body){
 		
 		line_value = line_value.trim();
 
-		switch(line_type){
+		rsvp[line_type] = line_value;
 
-			case 'from':
-				break;
-
-			case 'subject':
-				break;
-
-			case 'name':
-				break;
-
-			case 'number_of_guests':
-				break;
-
-			case 'events':
-				break;
-
-			case 'can_attend':
-				//can_attend is the last line of the email that needs to be parsed
-				//Break out of all loops or return
-				// return;
-				break message_loop;
-
+		if(line_type == 'can_attend'){
+			//can_attend is the last line of the email that needs to be parsed
+			//Break out of all loops or return
+			break;
 		}
 
 	}
+
+	return rsvp;
+
 }
 
 /*
@@ -168,11 +189,9 @@ function getGmailThreadsWithLabelName(label_name) {
 	}
 
 	do {
-
 		new_threads = label.getThreads(start,loop_count);
 		threads = threads.concat(new_threads);
 		start += loop_count;
-
 	}
 	while(new_threads.length > 0);
 
