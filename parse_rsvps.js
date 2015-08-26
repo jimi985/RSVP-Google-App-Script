@@ -1,3 +1,23 @@
+/*
+ *
+ * Script that pulls data in from Gmail with a specific label.
+ * All RSVP emails for my wedding are automatically filtered to this label.
+ * Then the emails are parsed and appended to the spreadhseet if they aren't already in the sheet.
+ *
+ * Example Email:
+ 
+From: John Doe & Jane Doe <jdoe123@gmail.com>
+Subject: John Doe & Jane Doe Fitzgerald has RSVP
+
+Name: John Doe & Jane Doe
+Email: jdoe123@gmail.com
+Number of Guest(s): 1
+Events:
+Can Attend: No
+
+ *
+ */
+
 
 /*
  * Global Variables
@@ -8,20 +28,25 @@ var LOGGING_ENABLED = true;
 // var date = new Date('August 22, 2015 00:00:00');
 // var START_TIME = date.getTime();
 var START_DATE = new Date('August 22, 2015 00:00:00');
-var MAX_THREADS_TO_PROCESS = 2;
+var MAX_THREADS_TO_PROCESS = 0;
 
 //Set which label we are using to filter which emails are being retrieved
 var RSVP_LABEL = 'Wedding RSVPs';
 var SPREADSHEET_ID = '1UTJ1Bs33uF0nbEEHYGIYUL4cv5ftV_W1j-jdhadw9po';
 
+var spreadsheet_field_names = [];
+var sheet;
+
 if(LOGGING_ENABLED){
 	//Clear out previous logs
 	Logger.clear();
-	Logger.log("Starting script: Parse Wedding RSVPs");
+	log("Starting script: Parse Wedding RSVPs");
 }
 
 /*
- * Set up our RSVP class that stores the details of the rsvp
+ * RSVP class that stores the details of the rsvp
+ * Also has a toArray method that is useful for passing the data
+ * into a Gmail Spreadsheet.
  */
 function RSVP(){
 
@@ -40,6 +65,35 @@ function RSVP(){
 }
 
 /*
+ * Loads the spreadsheet based on the predefined spreadsheet,
+ * Then populates the list of header fields within the spreadsheet.
+ * @returns - {boolean} - true if successful, false on failure.
+ */
+function initializeSpreadsheet(){
+
+	var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+	if(!spreadsheet){
+		return false;
+	}
+
+	sheet = spreadsheet.getSheets()[0];
+
+	if(!sheet){
+		return false;
+	}
+
+	spreadsheet_field_names = getSpreadsheetFieldNames(sheet);
+
+	if(!spreadsheet_field_names || spreadsheet_field_names.length <= 0){
+		return false;
+	}
+
+	return true;
+
+}
+
+/*
  * Function that retrieves a list of gmail email threads
  * with a provided label and parses them.
  * @param - {string} rsvp_label - The label applied to emails that should be parsed.
@@ -49,7 +103,13 @@ function processRSVPs(rsvp_label) {
 	var rsvp_threads = getGmailThreadsWithLabelName(rsvp_label);
 
 	if(rsvp_threads.length <= 0){
-		Logger.log("No Wedding RSVP Threads found");
+		log("No Wedding RSVP Threads found");
+		return false;
+	}
+
+	//We found some emails to parse, open the spreadsheet
+	if(!initializeSpreadsheet()){
+		log("Failed to initialize spreadsheet.");
 		return false;
 	}
 
@@ -69,16 +129,15 @@ function processRSVPs(rsvp_label) {
 	messages = filterMessages(messages);
 
 	for(i = 0; i < messages.length; i++){
-		Logger.log(messages[i].getBody());
 
 		var rsvp = parseRSVPEmail(messages[i].getBody());
 		rsvp.date = formatDate(messages[i].getDate());
 
 		//Add rsvp entry to spreadsheet
 		if(addRSVPToSpreadsheet(rsvp)) {
-			Logger.log("RSVP Successfully added to spreadsheet: " + JSON.stringify(rsvp));
+			log("RSVP Successfully added to spreadsheet: " + JSON.stringify(rsvp));
 		}else{
-			Logger.log("RSVP could not be added to spreadsheet: " + JSON.stringify(rsvp));
+			log("RSVP could not be added to spreadsheet: " + JSON.stringify(rsvp));
 		}
 
 	}
@@ -94,19 +153,10 @@ function processRSVPs(rsvp_label) {
 function addRSVPToSpreadsheet(rsvp){
 
 	//Convert the rsvp object into an array
-	rsvp_array = rsvp.toArray();
-	Logger.log('rsvp_array: ' + JSON.stringify(rsvp_array));
-	//Check if the spreadsheet exists or create a new one
-
-	var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
-	var sheet = spreadsheet.getSheets()[0];
-
-	if(!spreadsheet || !sheet){
-		return false;
-	}
+	rsvp_array = rsvp.toArray();	
 
 	if(RSVPEntryExists(rsvp, sheet)){
-		Logger.log('Entry already found in spreadsheet: ' + JSON.stringify(rsvp));
+		log('Entry already found in spreadsheet: ' + JSON.stringify(rsvp));
 		return false;
 	}
 
@@ -116,38 +166,49 @@ function addRSVPToSpreadsheet(rsvp){
 
 }
 
-function getSpreadsheetHeaderArray(sheet){
+/*
+ * Returns the list of field names from the first row of a spreadsheet.
+ * @param {Sheet} sheet - Gmail Sheet object.
+ * @param {string[]} - array of field names.
+ */
+function getSpreadsheetFieldNames(sheet){
 
 	//Find the column index of the last row
 	var last_column = sheet.getLastColumn();
 
 	//Sheet.getRange(row, column, numRows, numColumns)
 	//Get all of the values from the first row
-	var range = sheet.getRange(1, 1, last_column, 1);
+	var range = sheet.getRange(1, 1, 1, last_column);
 	var values = range.getValues();
 
 	var header = [];
 	for (var row in values) {
 		for (var col in values[row]) {
-			header.push(values[row][col]);
+			header_column_name = values[row][col].toLowerCase();
+			header_column_name = replaceAll(' ', '_', header_column_name);
+			header_column_name = replaceAll('[^a-z0-9_]', '', header_column_name);
+			header.push(header_column_name);
 		}
 	}
 
-	Logger.log('header values: ' + JSON.stringify(header));
 	return header;
 
 }
 
+/*
+ * Checks if the RSVP entry already exists in the Spreadsheet.
+ * @param {RSVP} rsvp - RSVP object to be checked.
+ * @param {Sheet} sheet - Gmail Sheet to be checked.
+ * @returns {boolean} - true if the entry exists or if there was an error, otherwise false.
+ */
 function RSVPEntryExists(rsvp, sheet){
 
-	var sheet_header = getSpreadSheetHeaderArray(sheet);
-
 	//Find the column that we need to be searching
-
-	search_column = sheet_header.indexOf('name');
+	search_column = spreadsheet_field_names.indexOf('name');
 
 	if(search_column == -1){
 		//Flag the entry as existing since there was an error.
+		
 		return true;
 	}
 
@@ -156,7 +217,8 @@ function RSVPEntryExists(rsvp, sheet){
 	// getRange(row, column, numRows)
 	//Get all of the values from the search column for all rows
 	//(Add 1 to the search_column as the Spreadsheet is 1-indexed instead of 0-indexed)
-	var range = sheet.getRange(1, search_column + 1, last_row);
+	//Start on row 2 as we don't want the header row
+	var range = sheet.getRange(2, search_column + 1, last_row);
 
 	var values = range.getValues();
 
@@ -175,6 +237,7 @@ function RSVPEntryExists(rsvp, sheet){
 /*
  * Filters an array of messages and returns a modified version of the original array
  * @param - {GmailMessage[]} messages - list of messages to be filtered.
+ * @returns - {GmailMessage[]} - filtered list of messages.
  */
 function filterMessages(messages) {
 
@@ -203,6 +266,8 @@ function filterMessages(messages) {
  * @returns {boolean}
  */
 function checkMessageDate(message, start_date) {
+	log('message time: ' + message.getDate().getTime());
+	log('start time: ' + start_date.getTime());
 	return (message.getDate().getTime() > start_date.getTime()) ? true : false;
 }
 
@@ -243,11 +308,6 @@ function parseRSVPEmail(body) {
 
 		for(var j = 1; j < line_parts.length; j++) {
 			line_value += line_parts[j];
-		}
-
-		if(line_type.indexOf('number') != -1){
-			Logger.log('line_type: ' + line_type);
-			Logger.log('line_value: ' + line_value)
 		}
 		
 		line_value = line_value.trim();
@@ -291,12 +351,6 @@ function getGmailThreadsWithLabelName(label_name) {
 		start += loop_count;
 	}
 	while(new_threads.length > 0);
-
-	if(LOGGING_ENABLED){
-		for (var i = 0; i < threads.length; i++) {
-			// Logger.log(threads[i].getFirstMessageSubject());
-		}
-	}
 	
 	return threads;
 
@@ -319,6 +373,7 @@ function replaceAll(find, replace, subject){
 /*
  * Helper function that escapes a regular expression provided as a string
  * @param {string} regex - Regular expression string.
+ * This escape does not work if you are trying to use metacharacters in your regular expression.
  */
 function escapeRegExp(regex) {
 	return regex.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
@@ -326,11 +381,23 @@ function escapeRegExp(regex) {
 
 /*
  * Helper function to format a javascript datetime value to be stored in a spreadsheet
+ * @param {Date} date - Javascript date object to be formatted
+ * @returns {string} - date formatted as "MM/DD/YYYY HH:MM:SS"
  */
 function formatDate(date) {
 	var formatted_date = (date.getMonth() + 1) + "/" + date.getDate() + "/" + date.getFullYear();
 	var formatted_time = date.getHours() + ':' + date.getMinutes() + ':' + date.getSeconds();
 	return formatted_date + ' ' + formatted_time;
+}
+
+/*
+ * Custom logging function that checks if logging has been enabled
+ * @param {String} message - message to be logged.
+ */
+function log(message){
+	if(LOGGING_ENABLED){
+		Logger.log(message);
+	}
 }
 
 processRSVPs(RSVP_LABEL);
