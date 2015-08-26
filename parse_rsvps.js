@@ -12,6 +12,7 @@ var MAX_THREADS_TO_PROCESS = 2;
 
 //Set which label we are using to filter which emails are being retrieved
 var RSVP_LABEL = 'Wedding RSVPs';
+var SPREADSHEET_ID = '1Tqa1SaUywdLx_IQS__4DU-D8B9g905KIdn4cC3suql4';
 
 if(LOGGING_ENABLED){
 	//Clear out previous logs
@@ -52,6 +53,7 @@ function processRSVPs(rsvp_label) {
 		Logger.log(messages[i].getBody());
 
 		var rsvp = parseRSVPEmail(messages[i].getBody());
+		rsvp.date = formatDate(messages[i].getDate());
 
 		//Add rsvp entry to spreadsheet
 		if(addRSVPToSpreadsheet(rsvp)) {
@@ -71,6 +73,13 @@ function processRSVPs(rsvp_label) {
  *  false if already exists or there was an error.
  */
 function addRSVPToSpreadsheet(rsvp){
+
+	//Check if the spreadsheet exists or create a new one
+	spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+	if(!spreadsheet){
+		return false;
+	}
 
 	return false;
 
@@ -118,18 +127,6 @@ function checkMessageDate(message, start_date) {
  * @returns - {Object} - rsvp details object.
  */
 function parseRSVPEmail(body) {
-
-	// var test = 'abcdefg';
-	// if(!test.hasOwnProperty('replaceAll')){
-	// 	Logger.log("test Missing replaceAll prototype method!?!");
-	// 	return false;
-	// }
-
-	// var msg = body;
-	// if(!msg.hasOwnProperty('replaceAll')){
-	// 	Logger.log("Missing replaceAll prototype method!?!");
-	// 	return false;
-	// }
 
 	body = body.replaceAll('<br />', '', body);
 
@@ -226,6 +223,15 @@ function replaceAll(find, replace, subject){
  */
 function escapeRegExp(regex) {
 	return regex.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1");
+}
+
+/*
+ * Helper function to format a javascript datetime value to be stored in a spreadsheet
+ */
+function formatDate(date) {
+	var formatted_date = (date.getMonth() + 1) + "/" + date.getDate() + "/" + date.getFullYear();
+	var formatted_time = date.getHours() + ':' + date.getMinutes() + ':' + date.getSeconds();
+	return formatted_date + ' ' + formatted_time;
 }
 
 processRSVPs(RSVP_LABEL);
