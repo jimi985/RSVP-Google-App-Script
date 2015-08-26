@@ -1,5 +1,10 @@
 
 var LOGGING_ENABLED = true;
+
+//Set a start date to filter out older emails
+var START_DATE = new Date('August 22, 2015 00:00:00');
+
+//Set which label we are using to filter which emails are being retrieved
 var rsvp_label = 'Wedding RSVPs';
 
 if(LOGGING_ENABLED){
@@ -48,15 +53,30 @@ function processThreadMessages(messages){
 	}
 
 	for (var i = 0; i < messages.length; i++) {
+		
+		if(!checkMessageDate(messages[i])){
+			Logger.log("Skipping message: " + messages[i].getMessage() + " because it is too old.");
+			continue;
+		}
+
 		Logger.log(messages[i].getBody());
 	}
 
 }
 
 /*
+ * Returns boolean if a message occurred after a specified date.
+ * This allows emails to be skipped that have already been processed.
+ * @param {GmailMessage} message - The GmailMessage object to be checked.
+ */
+function checkMessageDate(message, start_date){
+	return (message.getDate().getTime() > start_date.getTime()) ? true : false;
+}
+
+/*
  * Parses an email of a specific format to retrieve its component parts
  * The email must be formatted with as: <string>: <string>, representing a key/value pair.
- * @param - {string} - body
+ * @param - {string} body - the contents of an rsvp email.
  */
 function parseRSVPEmail(body){
 	msg = msg.replaceAll('<br />', '');
@@ -83,23 +103,18 @@ function parseRSVPEmail(body){
 		switch(line_type){
 
 			case 'from':
-				// console.log('from: ' + line_value);
 				break;
 
 			case 'subject':
-				// console.log('subject: ' + line_value);
 				break;
 
 			case 'name':
-				// console.log('name: ' + line_value);
 				break;
 
 			case 'number_of_guests':
-				// console.log('number_of_guests: ' + line_value);
 				break;
 
 			case 'events':
-				// console.log('events: ' + line_value);
 				break;
 
 			case 'can_attend':
